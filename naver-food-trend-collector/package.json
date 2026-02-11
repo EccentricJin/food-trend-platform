@@ -1,0 +1,25 @@
+{
+  "name": "naver-food-trend-collector",
+  "version": "1.0.0",
+  "description": "네이버 검색 API를 활용한 음식/디저트/카페 트렌드 데이터 수집 및 Kafka 파이프라인",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "collect:trends": "npx tsx src/collect-trends.ts",
+    "collect:ingredients": "npx tsx src/collect-ingredients.ts",
+    "summary": "npx tsx src/consume-summary.ts"
+  },
+  "keywords": ["naver", "kafka", "food-trend", "mcp"],
+  "author": "Kim SangJin (EccentricJin)",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.2.4",
+    "kafkajs": "^2.2.4",
+    "shared-db": "file:../shared-db"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

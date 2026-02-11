@@ -1,0 +1,23 @@
+{
+  "name": "kafka-to-mysql-consumer",
+  "version": "1.0.0",
+  "description": "Kafka Consumer that persists all food trend topics to MySQL",
+  "main": "dist/consumer.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/consumer.js",
+    "dev": "npx tsx src/consumer.ts",
+    "consume": "npx tsx src/consumer.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.4",
+    "kafkajs": "^2.2.4",
+    "mysql2": "^3.12.0",
+    "shared-db": "file:../shared-db"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
