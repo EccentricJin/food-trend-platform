@@ -128,7 +128,7 @@ async function main() {
 
         // MySQL 저장
         try {
-          const requestedAt = new Date().toISOString();
+          const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
           const dbRows: NaverIngredientSearchRow[] = items.map((item: any) => ({
             run_id: runId,
             msg_type: "ingredient_price",
@@ -172,7 +172,7 @@ async function main() {
 
         // MySQL 저장
         try {
-          const requestedAt = new Date().toISOString();
+          const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
           const dbRows: NaverIngredientSearchRow[] = items.map((item: any) => ({
             run_id: runId,
             msg_type: "ingredient_news",
@@ -229,7 +229,7 @@ async function main() {
       if (items.length > 0) {
         // MySQL 저장
         try {
-          const requestedAt = new Date().toISOString();
+          const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
           const dbRows: NaverIngredientSearchRow[] = items.map((item: any) => ({
             run_id: runId,
             msg_type: "ingredient_blog",

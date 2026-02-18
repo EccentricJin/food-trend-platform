@@ -95,7 +95,7 @@ async function fetchAndParseRss(keyword: string): Promise<RssItem[]> {
         title: decodeHtmlEntities(title),
         link,
         publisher: source ? decodeHtmlEntities(source) : "",
-        publishedAt: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+        publishedAt: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString().slice(0, 19).replace("T", " "),
         summary: description ? decodeHtmlEntities(stripHtml(description)).substring(0, 500) : "",
       });
     }

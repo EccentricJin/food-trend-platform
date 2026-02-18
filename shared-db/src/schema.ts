@@ -204,9 +204,23 @@ const TABLES: string[] = [
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
+const MIGRATIONS: string[] = [
+  // published_at: ISO 8601 문자열 호환을 위해 VARCHAR로 변경
+  `ALTER TABLE youtube_search_results MODIFY COLUMN published_at VARCHAR(50) NULL`,
+  `ALTER TABLE youtube_ingredient_prices MODIFY COLUMN published_at VARCHAR(50) NULL`,
+  `ALTER TABLE google_rss_news MODIFY COLUMN published_at VARCHAR(50) NULL`,
+];
+
 export async function ensureSchema(pool: Pool): Promise<void> {
   for (const ddl of TABLES) {
     await pool.execute(ddl);
+  }
+  for (const migration of MIGRATIONS) {
+    try {
+      await pool.execute(migration);
+    } catch {
+      // 이미 적용된 마이그레이션은 무시
+    }
   }
   console.log("[DB] 스키마 확인 완료 (8개 테이블)");
 }

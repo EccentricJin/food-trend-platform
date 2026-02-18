@@ -80,7 +80,7 @@ function buildDbRows(
   itemsList: Array<{ id: { videoId?: string }; snippet: { title: string; description: string; channelTitle: string; publishedAt: string; thumbnails: Record<string, { url: string; width: number; height: number }> } }>,
   statsMap: Record<string, { viewCount: string; likeCount: string; commentCount: string }>,
 ): YouTubeIngredientRow[] {
-  const requestedAt = new Date().toISOString();
+  const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
   return itemsList.map((item) => {
     const videoId = item.id.videoId ?? "";
     const stats = statsMap[videoId];

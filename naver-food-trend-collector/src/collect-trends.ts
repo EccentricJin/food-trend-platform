@@ -136,7 +136,7 @@ async function main() {
 
           // MySQL 저장
           try {
-            const requestedAt = new Date().toISOString();
+            const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
             const dbRows: NaverSearchRow[] = items.map((item: any) => ({
               run_id: runId,
               msg_type: `search_${type}`,

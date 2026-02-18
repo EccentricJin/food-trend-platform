@@ -140,7 +140,7 @@ async function main() {
 
         // MySQL 저장
         try {
-          const requestedAt = new Date().toISOString();
+          const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
           const dbRows: YouTubeSearchRow[] = items.map((item) => {
             const videoId = item.id.videoId ?? "";
             const stats = statsMap[videoId];
