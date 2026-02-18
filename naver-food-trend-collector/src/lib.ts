@@ -1,28 +1,9 @@
 import "dotenv/config";
-import { Kafka, CompressionTypes } from "kafkajs";
 
 // ── Environment ──────────────────────────────────────────────────────
-export const KAFKA_BOOTSTRAP_SERVERS = process.env.KAFKA_BOOTSTRAP_SERVERS ?? "";
-export const KAFKA_API_KEY = process.env.KAFKA_API_KEY ?? "";
-export const KAFKA_API_SECRET = process.env.KAFKA_API_SECRET ?? "";
-export const KAFKA_GROUP_ID = process.env.KAFKA_GROUP_ID ?? "mcp-consumer-group";
 export const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID ?? "";
 export const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET ?? "";
-
-export const TOPIC = "naver-search-results";
-export { CompressionTypes };
-
-// ── Kafka Client ─────────────────────────────────────────────────────
-export const kafka = new Kafka({
-  clientId: "naver-food-trend-collector",
-  brokers: KAFKA_BOOTSTRAP_SERVERS.split(","),
-  ssl: true,
-  sasl: {
-    mechanism: "plain",
-    username: KAFKA_API_KEY,
-    password: KAFKA_API_SECRET,
-  },
-});
+export const NEWS_API_BASE_URL = process.env.NEWS_API_BASE_URL ?? "";
 
 // ── Naver Search API ─────────────────────────────────────────────────
 export type NaverSearchType = "news" | "blog" | "shop" | "image" | "webkr" | "cafearticle";

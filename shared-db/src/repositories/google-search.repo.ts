@@ -8,13 +8,12 @@ export async function insertGoogleSearchResult(
   await pool.execute(
     `INSERT INTO google_search_results
        (run_id, category, keyword, requested_at, total_results, search_time,
-        title, link, snippet, display_link, kafka_offset, kafka_partition)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        title, link, snippet, display_link)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.run_id, row.category, row.keyword, row.requested_at,
       row.total_results, row.search_time,
       row.title, row.link, row.snippet, row.display_link,
-      row.kafka_offset ?? null, row.kafka_partition ?? null,
     ],
   );
 }
@@ -24,17 +23,16 @@ export async function insertGoogleSearchResultsBatch(
   rows: GoogleSearchRow[],
 ): Promise<void> {
   if (rows.length === 0) return;
-  const placeholders = rows.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+  const placeholders = rows.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
   const values = rows.flatMap((row) => [
     row.run_id, row.category, row.keyword, row.requested_at,
     row.total_results, row.search_time,
     row.title, row.link, row.snippet, row.display_link,
-    row.kafka_offset ?? null, row.kafka_partition ?? null,
   ]);
   await pool.execute(
     `INSERT INTO google_search_results
        (run_id, category, keyword, requested_at, total_results, search_time,
-        title, link, snippet, display_link, kafka_offset, kafka_partition)
+        title, link, snippet, display_link)
      VALUES ${placeholders}`,
     values,
   );

@@ -16,8 +16,6 @@ export interface GoogleSearchRow {
   link: string;
   snippet: string | null;
   display_link: string | null;
-  kafka_offset?: number | null;
-  kafka_partition?: number | null;
 }
 
 // ── YouTube Search ───────────────────────────────────────────
@@ -37,8 +35,6 @@ export interface YouTubeSearchRow {
   view_count: number | null;
   like_count: number | null;
   comment_count: number | null;
-  kafka_offset?: number | null;
-  kafka_partition?: number | null;
 }
 
 // ── YouTube Ingredient Prices ────────────────────────────────
@@ -59,8 +55,6 @@ export interface YouTubeIngredientRow {
   view_count: number | null;
   like_count: number | null;
   comment_count: number | null;
-  kafka_offset?: number | null;
-  kafka_partition?: number | null;
 }
 
 // ── Naver Ingredient Prices (Shopping) ───────────────────────
@@ -84,8 +78,6 @@ export interface NaverIngredientPriceRow {
   category2: string | null;
   category3: string | null;
   category4: string | null;
-  kafka_offset?: number | null;
-  kafka_partition?: number | null;
 }
 
 // ── Naver Search Results (Trend) ─────────────────────────────
@@ -100,8 +92,6 @@ export interface NaverSearchRow {
   item_title: string | null;
   item_link: string | null;
   item_data: string; // JSON string
-  kafka_offset?: number | null;
-  kafka_partition?: number | null;
 }
 
 // ── Naver Ingredient Search Results ──────────────────────────
@@ -120,6 +110,18 @@ export interface NaverIngredientSearchRow {
   item_title: string | null;
   item_link: string | null;
   item_data: string; // JSON string
-  kafka_offset?: number | null;
-  kafka_partition?: number | null;
+}
+
+// ── Google RSS News ──────────────────────────────────────────
+export interface GoogleRssNewsRow {
+  run_id: string | null;
+  keyword: string;
+  title: string;
+  link: string;
+  publisher: string | null;
+  published_at: string | null;
+  summary: string | null;
+  source: string;
+  news_api_synced?: boolean;
+  news_api_id?: string | null;
 }
