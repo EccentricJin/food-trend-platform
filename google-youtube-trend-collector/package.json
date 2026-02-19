@@ -13,7 +13,8 @@
     "summary:ingredients": "npx tsx src/consume-ingredients.ts",
     "collect:naver-prices": "npx tsx src/collect-naver-prices.ts",
     "summary:naver-prices": "npx tsx src/consume-naver-prices.ts",
-    "test:api": "npx tsx src/test-api.ts"
+    "test:api": "npx tsx src/test-api.ts",
+    "report:trend": "npx tsx src/bakery-ingredient-trend-report.ts"
   },
   "keywords": ["google", "youtube", "kafka", "trend-collector"],
   "author": "Kim SangJin (EccentricJin)",
