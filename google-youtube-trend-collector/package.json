@@ -19,7 +19,9 @@
     "sync:prices": "npx tsx src/sync-prices-to-ec2.ts",
     "sync:trends": "npx tsx src/sync-trends-to-ec2.ts",
     "sync:all": "npx tsx src/sync-all-to-ec2.ts",
-    "generate:history": "npx tsx src/generate-price-history.ts"
+    "generate:history": "npx tsx src/generate-price-history.ts",
+    "schedule:am": "npx tsx src/scheduled-sync.ts am",
+    "schedule:pm": "npx tsx src/scheduled-sync.ts pm"
   },
   "keywords": ["google", "youtube", "kafka", "trend-collector"],
   "author": "Kim SangJin (EccentricJin)",
