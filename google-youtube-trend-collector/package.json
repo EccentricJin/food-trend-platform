@@ -17,7 +17,8 @@
     "report:trend": "npx tsx src/bakery-ingredient-trend-report.ts",
     "sync:news": "npx tsx src/sync-news-to-ec2.ts",
     "sync:prices": "npx tsx src/sync-prices-to-ec2.ts",
-    "sync:trends": "npx tsx src/sync-trends-to-ec2.ts"
+    "sync:trends": "npx tsx src/sync-trends-to-ec2.ts",
+    "sync:all": "npx tsx src/sync-all-to-ec2.ts"
   },
   "keywords": ["google", "youtube", "kafka", "trend-collector"],
   "author": "Kim SangJin (EccentricJin)",
