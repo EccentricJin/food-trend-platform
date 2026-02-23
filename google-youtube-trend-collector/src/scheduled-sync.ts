@@ -308,39 +308,53 @@ async function syncNews(): Promise<{ collected: number; created: number; updated
 }
 
 // ════════════════════════════════════════════════════════════════
-// Phase 3: 트렌드 수집 → /api/internal/news/articles/batch
+// Phase 3: 트렌드 수집 → /api/internal/trends/batch
 // ════════════════════════════════════════════════════════════════
 
 interface TrendKw {
   keyword: string;
   category: string;
-  icon: string;
+  ingredientCode?: string;
 }
 
 const TREND_KEYWORDS: TrendKw[] = [
-  { keyword: "스페셜티 커피", category: "카페", icon: "☕" },
-  { keyword: "디카페인 커피", category: "카페", icon: "☕" },
-  { keyword: "카페 창업", category: "카페", icon: "☕" },
-  { keyword: "소금빵", category: "빵집", icon: "🍞" },
-  { keyword: "크루아상", category: "빵집", icon: "🥐" },
-  { keyword: "베이글", category: "빵집", icon: "🥯" },
-  { keyword: "마카롱", category: "디저트", icon: "🍪" },
-  { keyword: "약과", category: "디저트", icon: "🍯" },
-  { keyword: "티라미수", category: "디저트", icon: "🍰" },
-  { keyword: "바스크 치즈케이크", category: "디저트", icon: "🧀" },
-  { keyword: "무인카페", category: "업계", icon: "🤖" },
-  { keyword: "배달 디저트", category: "업계", icon: "🛵" },
-  { keyword: "발렌타인 초콜릿", category: "시즌", icon: "💝" },
-  { keyword: "화이트데이 선물", category: "시즌", icon: "🎁" },
-  { keyword: "봄 딸기 케이크", category: "시즌", icon: "🍓" },
+  { keyword: "스페셜티 커피", category: "카페", ingredientCode: "COFFEE_BEAN" },
+  { keyword: "디카페인 커피", category: "카페", ingredientCode: "COFFEE_BEAN" },
+  { keyword: "카페 창업", category: "카페" },
+  { keyword: "소금빵", category: "빵집", ingredientCode: "SALT" },
+  { keyword: "크루아상", category: "빵집", ingredientCode: "BUTTER" },
+  { keyword: "베이글", category: "빵집", ingredientCode: "FLOUR" },
+  { keyword: "마카롱", category: "디저트", ingredientCode: "ALMOND" },
+  { keyword: "약과", category: "디저트", ingredientCode: "HONEY" },
+  { keyword: "티라미수", category: "디저트", ingredientCode: "CHEESE" },
+  { keyword: "바스크 치즈케이크", category: "디저트", ingredientCode: "CHEESE" },
+  { keyword: "무인카페", category: "업계" },
+  { keyword: "배달 디저트", category: "업계" },
+  { keyword: "발렌타인 초콜릿", category: "시즌", ingredientCode: "CHOCOLATE" },
+  { keyword: "화이트데이 선물", category: "시즌", ingredientCode: "CHOCOLATE" },
+  { keyword: "봄 딸기 케이크", category: "시즌", ingredientCode: "CREAM" },
 ];
 
-async function syncTrends(): Promise<{ keywords: number; articles: number }> {
-  log("── Phase 3: 트렌드 수집 ──");
-  const today = todayStr();
-  const useYouTube = isPM && !!YOUTUBE_API_KEY; // 오후에만 YouTube 사용
+interface TrendItem {
+  bucketDate: string;
+  keyword: string;
+  source: string;
+  ingredientCode?: string;
+  buzzScore: number;
+  mentionCount: number;
+  positiveRatio?: number;
+  negativeRatio?: number;
+  topKeywords?: string;
+  summary?: string;
+  category?: string;
+}
 
-  const articles: NewsArticle[] = [];
+async function syncTrends(): Promise<{ keywords: number; created: number; updated: number }> {
+  log("── Phase 3: 트렌드 수집 → /api/internal/trends/batch ──");
+  const today = todayStr();
+  const useYouTube = isPM && !!YOUTUBE_API_KEY;
+
+  const trendItems: TrendItem[] = [];
 
   for (const kw of TREND_KEYWORDS) {
     let news = 0, blog = 0, cafe = 0, shop = 0, yt = 0;
@@ -381,39 +395,62 @@ async function syncTrends(): Promise<{ keywords: number; articles: number }> {
     if (yt >= 100) score += 10; else if (yt >= 20) score += 5; else if (yt >= 5) score += 2;
     score = Math.min(100, score);
 
-    log(`  ${kw.icon} ${kw.keyword.padEnd(14)} 뉴스:${formatNumber(news).padStart(7)} 블로그:${formatNumber(blog).padStart(9)} 버즈:${score}`);
+    const totalMentions = news + blog + cafe + shop + yt;
 
-    const slug = kw.keyword.replace(/\s+/g, "-");
-    articles.push({
-      title: `[${scheduleName}트렌드] ${kw.icon} ${kw.keyword} 버즈${score}점 (뉴스${formatNumber(news)} 블로그${formatNumber(blog)} 카페${formatNumber(cafe)} 쇼핑${formatNumber(shop)} YT${formatNumber(yt)}) ${today}`,
-      url: `https://trend.breadalert.com/${scheduleName}/${today}/${encodeURIComponent(slug)}`,
-      source: `trend_${scheduleName}`,
-      publisher: "BreadAlert 트렌드",
-      summary: `[${kw.category}] "${kw.keyword}" ${scheduleName} 트렌드. 뉴스 ${formatNumber(news)}건, 블로그 ${formatNumber(blog)}건, 카페 ${formatNumber(cafe)}건, 쇼핑 ${formatNumber(shop)}건, YouTube ${formatNumber(yt)}건. 버즈스코어 ${score}/100.`,
-      publishedAt: new Date().toISOString().replace(/\.\d{3}Z$/, ""),
+    log(`  ${kw.keyword.padEnd(14)} 뉴스:${formatNumber(news).padStart(7)} 블로그:${formatNumber(blog).padStart(9)} 버즈:${score}`);
+
+    // COMBINED 소스로 집계 데이터 전송
+    trendItems.push({
+      bucketDate: today,
+      keyword: kw.keyword,
+      source: "COMBINED",
+      ingredientCode: kw.ingredientCode,
+      buzzScore: score,
+      mentionCount: totalMentions,
+      topKeywords: [
+        news > 0 ? `뉴스:${formatNumber(news)}` : null,
+        blog > 0 ? `블로그:${formatNumber(blog)}` : null,
+        cafe > 0 ? `카페:${formatNumber(cafe)}` : null,
+        shop > 0 ? `쇼핑:${formatNumber(shop)}` : null,
+        yt > 0 ? `YouTube:${formatNumber(yt)}` : null,
+      ].filter(Boolean).join(","),
+      summary: `[${kw.category}] "${kw.keyword}" ${scheduleName} 트렌드. 버즈스코어 ${score}/100. 총 ${formatNumber(totalMentions)}건.`,
+      category: kw.category,
     });
+
+    // 개별 소스별 데이터도 전송
+    if (news > 0) {
+      trendItems.push({ bucketDate: today, keyword: kw.keyword, source: "NAVER_NEWS", ingredientCode: kw.ingredientCode, buzzScore: Math.min(40, news >= 1000 ? 40 : news >= 100 ? 20 : 5), mentionCount: news, category: kw.category });
+    }
+    if (blog > 0) {
+      trendItems.push({ bucketDate: today, keyword: kw.keyword, source: "NAVER_BLOG", ingredientCode: kw.ingredientCode, buzzScore: Math.min(25, blog >= 100000 ? 25 : blog >= 10000 ? 15 : 5), mentionCount: blog, category: kw.category });
+    }
+    if (yt > 0) {
+      trendItems.push({ bucketDate: today, keyword: kw.keyword, source: "YOUTUBE", ingredientCode: kw.ingredientCode, buzzScore: Math.min(10, yt >= 100 ? 10 : yt >= 20 ? 5 : 2), mentionCount: yt, category: kw.category });
+    }
 
     await sleep(150);
   }
 
-  // EC2 전송
-  let created = 0;
-  for (let i = 0; i < articles.length; i += 20) {
+  // EC2 전송 → /api/internal/trends/batch
+  let created = 0, updated = 0;
+  for (let i = 0; i < trendItems.length; i += 50) {
     try {
-      const res = await fetch(`${EC2_BASE_URL}/api/internal/news/articles/batch`, {
+      const res = await fetch(`${EC2_BASE_URL}/api/internal/trends/batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: articles.slice(i, i + 20) }),
+        body: JSON.stringify({ items: trendItems.slice(i, i + 50) }),
       });
       if (res.ok) {
-        const r = await res.json() as { created: number };
+        const r = await res.json() as { created: number; updated: number };
         created += r.created;
+        updated += r.updated;
       }
     } catch {}
   }
 
-  log(`  트렌드 결과: ${articles.length}건 전송 (생성 ${created})`);
-  return { keywords: TREND_KEYWORDS.length, articles: articles.length };
+  log(`  트렌드 결과: ${trendItems.length}건 전송 (생성 ${created} / 갱신 ${updated})`);
+  return { keywords: TREND_KEYWORDS.length, created, updated };
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -458,7 +495,7 @@ async function main(): Promise<void> {
   log("█".repeat(60));
   log(`  가격: ${p1.sent}건 → /api/prices/daily`);
   log(`  뉴스: ${p2.collected}건 (생성 ${p2.created} / 갱신 ${p2.updated})`);
-  log(`  트렌드: ${p3.articles}건 (${p3.keywords}개 키워드)`);
+  log(`  트렌드: ${p3.keywords}개 키워드 (생성 ${p3.created} / 갱신 ${p3.updated})`);
   log(`  네이버 API 호출: ~${naverApiCalls}회`);
   log("█".repeat(60));
   log("");
