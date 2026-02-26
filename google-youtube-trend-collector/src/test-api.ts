@@ -2,8 +2,6 @@ import {
   GOOGLE_API_KEY,
   GOOGLE_CSE_ID,
   YOUTUBE_API_KEY,
-  KAFKA_BOOTSTRAP_SERVERS,
-  kafka,
   searchGoogle,
   searchYouTube,
   getYouTubeVideoStats,
@@ -24,26 +22,12 @@ function check(name: string, condition: boolean) {
 
 async function main() {
   console.log("🔧 환경변수 확인");
-  check("KAFKA_BOOTSTRAP_SERVERS 설정됨", !!KAFKA_BOOTSTRAP_SERVERS);
   check("GOOGLE_API_KEY 설정됨", !!GOOGLE_API_KEY);
   check("GOOGLE_CSE_ID 설정됨", !!GOOGLE_CSE_ID);
   check("YOUTUBE_API_KEY 설정됨", !!YOUTUBE_API_KEY);
 
-  // Kafka 연결 테스트
-  console.log("\n[1/4] Kafka 연결 테스트");
-  try {
-    const admin = kafka.admin();
-    await admin.connect();
-    const topics = await admin.listTopics();
-    check("Kafka 클러스터 연결", true);
-    console.log(`    토픽 수: ${topics.length}`);
-    await admin.disconnect();
-  } catch (e) {
-    check(`Kafka 연결 실패: ${(e as Error).message}`, false);
-  }
-
   // Google Custom Search 테스트
-  console.log("\n[2/4] Google Custom Search API 테스트");
+  console.log("\n[1/3] Google Custom Search API 테스트");
   if (GOOGLE_API_KEY && GOOGLE_CSE_ID) {
     try {
       const result = await searchGoogle("두바이 쿠키", 1, 3);
@@ -64,7 +48,7 @@ async function main() {
   }
 
   // YouTube Search 테스트
-  console.log("\n[3/4] YouTube Search API 테스트");
+  console.log("\n[2/3] YouTube Search API 테스트");
   if (YOUTUBE_API_KEY) {
     try {
       const result = await searchYouTube("두바이 쿠키", 5, "date");
@@ -77,7 +61,7 @@ async function main() {
       }
 
       // YouTube Video Stats 테스트
-      console.log("\n[4/4] YouTube Video Stats API 테스트");
+      console.log("\n[3/3] YouTube Video Stats API 테스트");
       const videoIds = result.items
         .map((i) => i.id.videoId)
         .filter((id): id is string => !!id)

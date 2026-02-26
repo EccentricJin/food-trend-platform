@@ -1,9 +1,6 @@
 import {
-  kafka,
   searchYouTube,
   getYouTubeVideoStats,
-  CompressionTypes,
-  YOUTUBE_SEARCH_TOPIC,
   sleep,
   oneWeekAgo,
 } from "./lib.js";
@@ -32,17 +29,24 @@ const queries: QueryGroup[] = [
   {
     category: "유행디저트",
     keywords: [
-      "2025 디저트 트렌드",
+      "2026 디저트 트렌드",
       "크럼블쿠키 만들기",
       "약과 만들기",
       "소금빵 레시피",
       "휘낭시에 만들기",
+      "크루아상 레시피",
+      "타르트 만들기",
+      "마들렌 레시피",
+      "까눌레 만들기",
+      "스콘 레시피",
+      "에그타르트 만들기",
+      "티라미수 레시피",
     ],
   },
   {
     category: "유행음식",
     keywords: [
-      "2025 음식 트렌드",
+      "2026 음식 트렌드",
       "마라탕 먹방",
       "로제떡볶이 레시피",
       "제로음료 리뷰",
@@ -52,24 +56,44 @@ const queries: QueryGroup[] = [
   {
     category: "유행카페",
     keywords: [
-      "2025 카페 추천",
+      "2026 카페 추천",
       "성수 카페 브이로그",
       "을지로 카페 투어",
       "카페 디저트 추천",
     ],
   },
+  {
+    category: "카페운영",
+    keywords: [
+      "카페 창업 브이로그",
+      "카페 운영 일상",
+      "카페 메뉴 개발",
+      "카페 인테리어 꾸미기",
+    ],
+  },
+  {
+    category: "베이커리운영",
+    keywords: [
+      "빵집 창업 브이로그",
+      "베이커리 운영",
+      "제과 기술 배우기",
+      "빵집 메뉴 개발",
+    ],
+  },
+  {
+    category: "원재료가격",
+    keywords: [
+      "밀가루 가격",
+      "버터 가격 비교",
+      "설탕 가격",
+      "달걀 가격",
+      "베이킹 재료 가격",
+      "카카오 초콜릿 가격",
+    ],
+  },
 ];
 
 async function main() {
-  // 토픽 생성
-  const admin = kafka.admin();
-  await admin.connect();
-  const created = await admin.createTopics({
-    topics: [{ topic: YOUTUBE_SEARCH_TOPIC, numPartitions: 6, replicationFactor: 3 }],
-  });
-  console.log(`토픽 '${YOUTUBE_SEARCH_TOPIC}':`, created ? "새로 생성" : "이미 존재");
-  await admin.disconnect();
-
   // MySQL 초기화
   const pool = getPool();
   await ensureSchema(pool);
@@ -78,10 +102,7 @@ async function main() {
     collector: "collect-youtube",
   });
 
-  const producer = kafka.producer();
-  await producer.connect();
-
-  let totalMessages = 0;
+  let totalRecords = 0;
   const publishedAfter = oneWeekAgo();
 
   for (const { category, keywords } of queries) {
@@ -117,53 +138,9 @@ async function main() {
           }
         }
 
-        const messages = items.map((item, idx) => {
-          const videoId = item.id.videoId ?? "";
-          const stats = statsMap[videoId];
-
-          return {
-            key: `youtube:${category}:${keyword}:${idx}`,
-            value: JSON.stringify({
-              type: "youtube_search",
-              category,
-              keyword,
-              requestedAt: new Date().toISOString(),
-              totalResults: data.pageInfo.totalResults,
-              video: {
-                videoId,
-                title: item.snippet.title,
-                description: item.snippet.description,
-                channelTitle: item.snippet.channelTitle,
-                publishedAt: item.snippet.publishedAt,
-                thumbnail: item.snippet.thumbnails?.medium?.url ?? "",
-                url: videoId ? `https://www.youtube.com/watch?v=${videoId}` : "",
-              },
-              statistics: stats
-                ? {
-                    viewCount: parseInt(stats.viewCount || "0"),
-                    likeCount: parseInt(stats.likeCount || "0"),
-                    commentCount: parseInt(stats.commentCount || "0"),
-                  }
-                : null,
-            }),
-            headers: {
-              source: "youtube-search-collector",
-              category,
-              query: keyword,
-              videoId,
-            },
-          };
-        });
-
-        await producer.send({
-          topic: YOUTUBE_SEARCH_TOPIC,
-          compression: CompressionTypes.GZIP,
-          messages,
-        });
-
         // MySQL 저장
         try {
-          const requestedAt = new Date().toISOString();
+          const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
           const dbRows: YouTubeSearchRow[] = items.map((item) => {
             const videoId = item.id.videoId ?? "";
             const stats = statsMap[videoId];
@@ -190,7 +167,7 @@ async function main() {
           console.log(`  [DB] 저장 실패: ${(dbErr as Error).message}`);
         }
 
-        totalMessages += messages.length;
+        totalRecords += items.length;
 
         // 조회수 상위 3개 표시
         const topViewed = items
@@ -219,15 +196,13 @@ async function main() {
     }
   }
 
-  await producer.disconnect();
-  await completeCollectionRun(pool, runId, totalMessages);
+  await completeCollectionRun(pool, runId, totalRecords);
   await closePool();
 
   console.log(`\n${"=".repeat(60)}`);
   console.log("📊 YouTube 검색 수집 완료");
   console.log("=".repeat(60));
-  console.log(`  총 Kafka 메시지: ${totalMessages}건`);
-  console.log(`  저장 토픽: ${YOUTUBE_SEARCH_TOPIC}`);
+  console.log(`  총 수집: ${totalRecords}건`);
   console.log(`  수집 기간: ${publishedAfter.split("T")[0]} ~ 현재`);
   console.log(`  MySQL 저장: ✅ (run_id: ${runId})`);
   console.log("=".repeat(60));

@@ -1,9 +1,6 @@
 import {
-  kafka,
   searchYouTube,
   getYouTubeVideoStats,
-  CompressionTypes,
-  YOUTUBE_INGREDIENTS_TOPIC,
   sleep,
   oneWeekAgo,
 } from "./lib.js";
@@ -38,11 +35,11 @@ const ingredients: IngredientQuery[] = [
   },
   {
     ingredient: "버터",
-    keywords: ["버터 가격 비교 2025", "베이킹 버터 추천", "무염버터 가격"],
+    keywords: ["버터 가격 비교 2026", "베이킹 버터 추천", "무염버터 가격"],
   },
   {
     ingredient: "설탕",
-    keywords: ["설탕 가격 2025", "베이킹 설탕 종류", "비정제 설탕 가격"],
+    keywords: ["설탕 가격 2026", "베이킹 설탕 종류", "비정제 설탕 가격"],
   },
   {
     ingredient: "밀가루",
@@ -50,7 +47,7 @@ const ingredients: IngredientQuery[] = [
   },
   {
     ingredient: "달걀",
-    keywords: ["달걀 가격 시세", "계란 가격 2025", "달걀 가격 추이"],
+    keywords: ["달걀 가격 시세", "계란 가격 2026", "달걀 가격 추이"],
   },
   {
     ingredient: "바닐라",
@@ -59,6 +56,18 @@ const ingredients: IngredientQuery[] = [
   {
     ingredient: "두바이쿠키 완제품",
     keywords: ["두바이 쫀득 쿠키 가격", "두쫀쿠 가격 비교", "두바이 쿠키 편의점 가격"],
+  },
+  {
+    ingredient: "생크림",
+    keywords: ["생크림 가격", "동물성 생크림 가격", "베이킹 생크림"],
+  },
+  {
+    ingredient: "우유",
+    keywords: ["우유 가격 시세", "베이킹 우유 가격", "우유 원유 가격"],
+  },
+  {
+    ingredient: "카카오",
+    keywords: ["카카오 가격 동향", "카카오 원두 시세", "카카오 버터 가격"],
   },
 ];
 
@@ -71,7 +80,7 @@ function buildDbRows(
   itemsList: Array<{ id: { videoId?: string }; snippet: { title: string; description: string; channelTitle: string; publishedAt: string; thumbnails: Record<string, { url: string; width: number; height: number }> } }>,
   statsMap: Record<string, { viewCount: string; likeCount: string; commentCount: string }>,
 ): YouTubeIngredientRow[] {
-  const requestedAt = new Date().toISOString();
+  const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
   return itemsList.map((item) => {
     const videoId = item.id.videoId ?? "";
     const stats = statsMap[videoId];
@@ -97,15 +106,6 @@ function buildDbRows(
 }
 
 async function main() {
-  // 토픽 생성
-  const admin = kafka.admin();
-  await admin.connect();
-  const created = await admin.createTopics({
-    topics: [{ topic: YOUTUBE_INGREDIENTS_TOPIC, numPartitions: 6, replicationFactor: 3 }],
-  });
-  console.log(`토픽 '${YOUTUBE_INGREDIENTS_TOPIC}':`, created ? "새로 생성" : "이미 존재");
-  await admin.disconnect();
-
   // MySQL 초기화
   const pool = getPool();
   await ensureSchema(pool);
@@ -114,10 +114,7 @@ async function main() {
     collector: "collect-ingredients",
   });
 
-  const producer = kafka.producer();
-  await producer.connect();
-
-  let totalMessages = 0;
+  let totalRecords = 0;
   const publishedAfter = oneWeekAgo();
 
   console.log(`\n${"=".repeat(60)}`);
@@ -161,59 +158,15 @@ async function main() {
             }
           }
 
-          const messages = itemsAll.map((item, idx) => {
-            const videoId = item.id.videoId ?? "";
-            const stats = statsMap[videoId];
-            return {
-              key: `ingredient:${ingredient}:${keyword}:${idx}`,
-              value: JSON.stringify({
-                type: "ingredient_price",
-                ingredient,
-                keyword,
-                requestedAt: new Date().toISOString(),
-                period: "all",
-                totalResults: dataAll.pageInfo.totalResults,
-                video: {
-                  videoId,
-                  title: item.snippet.title,
-                  description: item.snippet.description,
-                  channelTitle: item.snippet.channelTitle,
-                  publishedAt: item.snippet.publishedAt,
-                  thumbnail: item.snippet.thumbnails?.medium?.url ?? "",
-                  url: videoId ? `https://www.youtube.com/watch?v=${videoId}` : "",
-                },
-                statistics: stats
-                  ? {
-                      viewCount: parseInt(stats.viewCount || "0"),
-                      likeCount: parseInt(stats.likeCount || "0"),
-                      commentCount: parseInt(stats.commentCount || "0"),
-                    }
-                  : null,
-              }),
-              headers: {
-                source: "youtube-ingredient-collector",
-                ingredient,
-                query: keyword,
-                videoId,
-              },
-            };
-          });
-
-          await producer.send({
-            topic: YOUTUBE_INGREDIENTS_TOPIC,
-            compression: CompressionTypes.GZIP,
-            messages,
-          });
-
           // MySQL 저장
           try {
             const dbRows = buildDbRows(runId, ingredient, keyword, "all", dataAll.pageInfo.totalResults, itemsAll, statsMap);
             await insertYouTubeIngredientPricesBatch(pool, dbRows);
+            totalRecords += dbRows.length;
           } catch (dbErr) {
             console.log(`  [DB] 저장 실패: ${(dbErr as Error).message}`);
           }
 
-          totalMessages += messages.length;
           console.log(
             `  ✅ "${keyword}" - ${itemsAll.length}건 (전체기간, 총 ${dataAll.pageInfo.totalResults}건)`,
           );
@@ -238,59 +191,14 @@ async function main() {
           }
         }
 
-        const messages = items.map((item, idx) => {
-          const videoId = item.id.videoId ?? "";
-          const stats = statsMap[videoId];
-          return {
-            key: `ingredient:${ingredient}:${keyword}:${idx}`,
-            value: JSON.stringify({
-              type: "ingredient_price",
-              ingredient,
-              keyword,
-              requestedAt: new Date().toISOString(),
-              period: "1week",
-              totalResults: data.pageInfo.totalResults,
-              video: {
-                videoId,
-                title: item.snippet.title,
-                description: item.snippet.description,
-                channelTitle: item.snippet.channelTitle,
-                publishedAt: item.snippet.publishedAt,
-                thumbnail: item.snippet.thumbnails?.medium?.url ?? "",
-                url: videoId ? `https://www.youtube.com/watch?v=${videoId}` : "",
-              },
-              statistics: stats
-                ? {
-                    viewCount: parseInt(stats.viewCount || "0"),
-                    likeCount: parseInt(stats.likeCount || "0"),
-                    commentCount: parseInt(stats.commentCount || "0"),
-                  }
-                : null,
-            }),
-            headers: {
-              source: "youtube-ingredient-collector",
-              ingredient,
-              query: keyword,
-              videoId,
-            },
-          };
-        });
-
-        await producer.send({
-          topic: YOUTUBE_INGREDIENTS_TOPIC,
-          compression: CompressionTypes.GZIP,
-          messages,
-        });
-
         // MySQL 저장
         try {
           const dbRows = buildDbRows(runId, ingredient, keyword, "1week", data.pageInfo.totalResults, items, statsMap);
           await insertYouTubeIngredientPricesBatch(pool, dbRows);
+          totalRecords += dbRows.length;
         } catch (dbErr) {
           console.log(`  [DB] 저장 실패: ${(dbErr as Error).message}`);
         }
-
-        totalMessages += messages.length;
 
         // 조회수 상위 2개 표시
         const topViewed = items
@@ -319,15 +227,13 @@ async function main() {
     }
   }
 
-  await producer.disconnect();
-  await completeCollectionRun(pool, runId, totalMessages);
+  await completeCollectionRun(pool, runId, totalRecords);
   await closePool();
 
   console.log(`\n${"=".repeat(60)}`);
   console.log("📊 재료 가격 수집 완료");
   console.log("=".repeat(60));
-  console.log(`  총 Kafka 메시지: ${totalMessages}건`);
-  console.log(`  저장 토픽: ${YOUTUBE_INGREDIENTS_TOPIC}`);
+  console.log(`  총 저장 레코드: ${totalRecords}건`);
   console.log(`  재료 종류: ${ingredients.length}종`);
   console.log(`  MySQL 저장: ✅ (run_id: ${runId})`);
   console.log("=".repeat(60));

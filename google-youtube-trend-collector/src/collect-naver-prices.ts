@@ -1,8 +1,5 @@
 import {
-  kafka,
   searchNaverShopping,
-  CompressionTypes,
-  NAVER_INGREDIENT_PRICES_TOPIC,
   sleep,
   NaverShopItem,
 } from "./lib.js";
@@ -70,6 +67,16 @@ const ingredients: IngredientQuery[] = [
     unit: "1개",
     keywords: ["두바이 쫀득 쿠키", "두쫀쿠", "두바이 초콜릿 쿠키"],
   },
+  {
+    ingredient: "생크림",
+    unit: "1L",
+    keywords: ["동물성 생크림", "생크림 1L", "베이킹 생크림"],
+  },
+  {
+    ingredient: "우유",
+    unit: "1L",
+    keywords: ["우유 1L", "서울우유", "베이킹 우유"],
+  },
 ];
 
 function cleanHtml(str: string): string {
@@ -77,15 +84,6 @@ function cleanHtml(str: string): string {
 }
 
 async function main() {
-  // 토픽 생성
-  const admin = kafka.admin();
-  await admin.connect();
-  const created = await admin.createTopics({
-    topics: [{ topic: NAVER_INGREDIENT_PRICES_TOPIC, numPartitions: 6, replicationFactor: 3 }],
-  });
-  console.log(`토픽 '${NAVER_INGREDIENT_PRICES_TOPIC}':`, created ? "새로 생성" : "이미 존재");
-  await admin.disconnect();
-
   // MySQL 초기화
   const pool = getPool();
   await ensureSchema(pool);
@@ -94,10 +92,7 @@ async function main() {
     collector: "collect-naver-prices",
   });
 
-  const producer = kafka.producer();
-  await producer.connect();
-
-  let totalMessages = 0;
+  let totalRecords = 0;
 
   console.log(`\n${"=".repeat(65)}`);
   console.log("🍪 두바이 쫀득 쿠키 재료 + 완제품 실제 판매 가격 수집 (Naver 쇼핑)");
@@ -117,47 +112,9 @@ async function main() {
           continue;
         }
 
-        const messages = items.map((item: NaverShopItem, idx: number) => ({
-          key: `naver-price:${ingredient}:${keyword}:${idx}`,
-          value: JSON.stringify({
-            type: "naver_ingredient_price",
-            ingredient,
-            unit,
-            keyword,
-            requestedAt: new Date().toISOString(),
-            totalResults: data.total,
-            product: {
-              title: cleanHtml(item.title),
-              link: item.link,
-              image: item.image,
-              lprice: parseInt(item.lprice || "0"),
-              hprice: parseInt(item.hprice || "0"),
-              mallName: item.mallName,
-              brand: item.brand,
-              maker: item.maker,
-              productType: item.productType,
-              category1: item.category1,
-              category2: item.category2,
-              category3: item.category3,
-              category4: item.category4,
-            },
-          }),
-          headers: {
-            source: "naver-shopping-collector",
-            ingredient,
-            query: keyword,
-          },
-        }));
-
-        await producer.send({
-          topic: NAVER_INGREDIENT_PRICES_TOPIC,
-          compression: CompressionTypes.GZIP,
-          messages,
-        });
-
         // MySQL 저장
         try {
-          const requestedAt = new Date().toISOString();
+          const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
           const dbRows: NaverIngredientPriceRow[] = items.map((item: NaverShopItem) => ({
             run_id: runId,
             ingredient,
@@ -180,11 +137,10 @@ async function main() {
             category4: item.category4,
           }));
           await insertNaverIngredientPricesBatch(pool, dbRows);
+          totalRecords += dbRows.length;
         } catch (dbErr) {
           console.log(`  [DB] 저장 실패: ${(dbErr as Error).message}`);
         }
-
-        totalMessages += messages.length;
 
         // 가격 통계
         const prices = items
@@ -219,15 +175,13 @@ async function main() {
     }
   }
 
-  await producer.disconnect();
-  await completeCollectionRun(pool, runId, totalMessages);
+  await completeCollectionRun(pool, runId, totalRecords);
   await closePool();
 
   console.log(`\n${"=".repeat(65)}`);
   console.log("📊 Naver 쇼핑 가격 수집 완료");
   console.log("=".repeat(65));
-  console.log(`  총 Kafka 메시지: ${totalMessages}건`);
-  console.log(`  저장 토픽: ${NAVER_INGREDIENT_PRICES_TOPIC}`);
+  console.log(`  총 저장 레코드: ${totalRecords}건`);
   console.log(`  재료 종류: ${ingredients.length}종`);
   console.log(`  MySQL 저장: ✅ (run_id: ${runId})`);
   console.log("=".repeat(65));

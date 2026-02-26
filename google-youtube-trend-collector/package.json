@@ -1,12 +1,13 @@
 {
   "name": "google-youtube-trend-collector",
   "version": "1.0.0",
-  "description": "Google Custom Search + YouTube Data API 기반 트렌드 데이터 수집 및 Kafka 파이프라인",
+  "description": "Google Custom Search + YouTube Data API + Google RSS 기반 트렌드 데이터 수집",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "collect:google": "npx tsx src/collect-google.ts",
     "collect:youtube": "npx tsx src/collect-youtube.ts",
+    "collect:google-rss": "npx tsx src/collect-google-rss.ts",
     "collect:all": "npx tsx src/collect-all.ts",
     "summary": "npx tsx src/consume-summary.ts",
     "collect:ingredients": "npx tsx src/collect-ingredients.ts",
@@ -15,12 +16,11 @@
     "summary:naver-prices": "npx tsx src/consume-naver-prices.ts",
     "test:api": "npx tsx src/test-api.ts"
   },
-  "keywords": ["google", "youtube", "kafka", "trend-collector"],
+  "keywords": ["google", "youtube", "rss", "trend-collector"],
   "author": "Kim SangJin (EccentricJin)",
   "license": "ISC",
   "dependencies": {
     "dotenv": "^17.2.4",
-    "kafkajs": "^2.2.4",
     "shared-db": "file:../shared-db"
   },
   "devDependencies": {

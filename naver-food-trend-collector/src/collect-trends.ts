@@ -1,9 +1,11 @@
-import { kafka, searchNaver, CompressionTypes, TOPIC, sleep } from "./lib.js";
+import { searchNaver, NEWS_API_BASE_URL, sleep } from "./lib.js";
 import {
   getPool, closePool, ensureSchema,
   startCollectionRun, completeCollectionRun, failCollectionRun,
   insertNaverSearchResultsBatch,
+  sendNewsArticlesBatch,
   type NaverSearchRow,
+  type NewsArticleInput,
 } from "shared-db";
 
 interface QueryGroup {
@@ -19,7 +21,7 @@ const queries: QueryGroup[] = [
   {
     category: "유행디저트",
     keywords: [
-      "2025 유행 디저트",
+      "2026 유행 디저트",
       "크럼블쿠키",
       "약과 디저트",
       "소금빵",
@@ -31,7 +33,7 @@ const queries: QueryGroup[] = [
   {
     category: "유행음식",
     keywords: [
-      "2025 유행 음식",
+      "2026 유행 음식",
       "마라탕 맛집",
       "로제떡볶이",
       "제로음료 트렌드",
@@ -43,13 +45,41 @@ const queries: QueryGroup[] = [
   {
     category: "유행카페",
     keywords: [
-      "2025 핫플 카페",
+      "2026 핫플 카페",
       "성수 카페 추천",
       "을지로 카페",
       "카페 디저트 맛집",
       "대형카페 추천",
       "뷰맛집 카페",
       "브런치 카페",
+    ],
+  },
+  {
+    category: "카페운영",
+    keywords: [
+      "카페 창업 2026",
+      "카페 운영 팁",
+      "카페 메뉴 트렌드",
+      "카페 원가 관리",
+    ],
+  },
+  {
+    category: "베이커리운영",
+    keywords: [
+      "베이커리 창업 2026",
+      "베이커리 트렌드",
+      "빵집 인기 메뉴",
+      "베이커리 원가",
+    ],
+  },
+  {
+    category: "원재료가격",
+    keywords: [
+      "밀가루 가격 동향 2026",
+      "버터 가격 동향 2026",
+      "설탕 가격 동향 2026",
+      "카카오 가격 동향 2026",
+      "달걀 가격 동향 2026",
     ],
   },
 ];
@@ -62,7 +92,14 @@ const SHOP_KEYWORDS = new Set([
   "소금빵",
   "휘낭시에",
   "마카롱 신메뉴",
+  "크루아상 맛집",
+  "로제떡볶이",
+  "주먹밥 맛집",
 ]);
+
+function stripHtml(str: string): string {
+  return str.replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, " ").trim();
+}
 
 type SearchType = "news" | "blog" | "shop";
 
@@ -75,11 +112,8 @@ async function main() {
     collector: "collect-trends",
   });
 
-  const producer = kafka.producer();
-  await producer.connect();
-
   const searchTypes: SearchType[] = ["news", "blog", "shop"];
-  let totalMessages = 0;
+  let totalRecords = 0;
   let totalItems = 0;
 
   for (const { category, keywords } of queries) {
@@ -100,34 +134,9 @@ async function main() {
             continue;
           }
 
-          const messages = items.map((item, idx) => ({
-            key: `${category}:${type}:${keyword}:${idx}`,
-            value: JSON.stringify({
-              type: `search_${type}`,
-              category,
-              keyword,
-              searchType: type,
-              requestedAt: new Date().toISOString(),
-              totalAvailable: data.total,
-              item,
-            }),
-            headers: {
-              source: "naver-trend-collector",
-              category,
-              searchType: type,
-              query: keyword,
-            },
-          }));
-
-          await producer.send({
-            topic: TOPIC,
-            compression: CompressionTypes.GZIP,
-            messages,
-          });
-
           // MySQL 저장
           try {
-            const requestedAt = new Date().toISOString();
+            const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
             const dbRows: NaverSearchRow[] = items.map((item: any) => ({
               run_id: runId,
               msg_type: `search_${type}`,
@@ -141,11 +150,29 @@ async function main() {
               item_data: JSON.stringify(item),
             }));
             await insertNaverSearchResultsBatch(pool, dbRows);
+            totalRecords += dbRows.length;
           } catch (dbErr) {
             console.log(`  [DB] 저장 실패: ${(dbErr as Error).message}`);
           }
 
-          totalMessages += messages.length;
+          // News API 전송 (news 타입만)
+          if (type === "news" && NEWS_API_BASE_URL) {
+            try {
+              const articles: NewsArticleInput[] = items.map((item: any) => ({
+                title: stripHtml(item.title ?? ""),
+                url: item.originallink ?? item.link ?? "",
+                source: "naver-news",
+                publisher: item.mallName ?? null,
+                summary: stripHtml(item.description ?? ""),
+                publishedAt: item.pubDate ?? null,
+              }));
+              const result = await sendNewsArticlesBatch(NEWS_API_BASE_URL, articles);
+              console.log(`  📰 News API: ${result.created}건 생성 / ${result.updated}건 업데이트`);
+            } catch (newsErr) {
+              console.log(`  [News API] 전송 실패: ${(newsErr as Error).message}`);
+            }
+          }
+
           totalItems += items.length;
           console.log(
             `  ✅ [${type}] "${keyword}" - ${items.length}건 수집 (전체 ${data.total}건)`,
@@ -158,16 +185,14 @@ async function main() {
     }
   }
 
-  await producer.disconnect();
-  await completeCollectionRun(pool, runId, totalMessages);
+  await completeCollectionRun(pool, runId, totalRecords);
   await closePool();
 
   console.log(`\n${"=".repeat(60)}`);
   console.log("📊 수집 완료 요약");
   console.log("=".repeat(60));
-  console.log(`  총 Kafka 메시지: ${totalMessages}건`);
+  console.log(`  총 저장 레코드: ${totalRecords}건`);
   console.log(`  총 수집 아이템: ${totalItems}건`);
-  console.log(`  저장 토픽: ${TOPIC}`);
   console.log(`  MySQL 저장: ✅ (run_id: ${runId})`);
   console.log("=".repeat(60));
 }

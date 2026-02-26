@@ -181,11 +181,46 @@ const TABLES: string[] = [
     INDEX idx_requested_at (requested_at),
     INDEX idx_run_id (run_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+  // 8. google_rss_news (Google RSS 뉴스)
+  `CREATE TABLE IF NOT EXISTS google_rss_news (
+    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    run_id          VARCHAR(36) NULL,
+    keyword         VARCHAR(200) NOT NULL,
+    title           TEXT NOT NULL,
+    link            VARCHAR(2048) NOT NULL,
+    publisher       VARCHAR(200) NULL,
+    published_at    DATETIME NULL,
+    summary         TEXT NULL,
+    source          VARCHAR(50) NOT NULL DEFAULT 'google_rss_kr',
+    news_api_synced TINYINT(1) NOT NULL DEFAULT 0,
+    news_api_id     VARCHAR(100) NULL,
+    created_at      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    INDEX idx_keyword (keyword),
+    INDEX idx_published_at (published_at),
+    INDEX idx_source (source),
+    INDEX idx_run_id (run_id),
+    UNIQUE KEY uk_link (link(500))
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+];
+
+const MIGRATIONS: string[] = [
+  // published_at: ISO 8601 문자열 호환을 위해 VARCHAR로 변경
+  `ALTER TABLE youtube_search_results MODIFY COLUMN published_at VARCHAR(50) NULL`,
+  `ALTER TABLE youtube_ingredient_prices MODIFY COLUMN published_at VARCHAR(50) NULL`,
+  `ALTER TABLE google_rss_news MODIFY COLUMN published_at VARCHAR(50) NULL`,
 ];
 
 export async function ensureSchema(pool: Pool): Promise<void> {
   for (const ddl of TABLES) {
     await pool.execute(ddl);
   }
-  console.log("[DB] 스키마 확인 완료 (7개 테이블)");
+  for (const migration of MIGRATIONS) {
+    try {
+      await pool.execute(migration);
+    } catch {
+      // 이미 적용된 마이그레이션은 무시
+    }
+  }
+  console.log("[DB] 스키마 확인 완료 (8개 테이블)");
 }

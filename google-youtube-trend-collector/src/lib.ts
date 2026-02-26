@@ -1,36 +1,12 @@
 import "dotenv/config";
-import { Kafka, CompressionTypes } from "kafkajs";
 
 // ── Environment ──────────────────────────────────────────────────────
-export const KAFKA_BOOTSTRAP_SERVERS = process.env.KAFKA_BOOTSTRAP_SERVERS ?? "";
-export const KAFKA_API_KEY = process.env.KAFKA_API_KEY ?? "";
-export const KAFKA_API_SECRET = process.env.KAFKA_API_SECRET ?? "";
-export const KAFKA_GROUP_ID = process.env.KAFKA_GROUP_ID ?? "mcp-consumer-group";
-
 export const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY ?? "";
 export const GOOGLE_CSE_ID = process.env.GOOGLE_CSE_ID ?? "";
 export const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY ?? "";
 export const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID ?? "";
 export const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET ?? "";
-
-export const GOOGLE_SEARCH_TOPIC = "google-search-results";
-export const YOUTUBE_SEARCH_TOPIC = "youtube-search-results";
-export const YOUTUBE_INGREDIENTS_TOPIC = "youtube-ingredient-prices";
-export const NAVER_INGREDIENT_PRICES_TOPIC = "naver-ingredient-prices";
-
-export { CompressionTypes };
-
-// ── Kafka Client ─────────────────────────────────────────────────────
-export const kafka = new Kafka({
-  clientId: "google-youtube-trend-collector",
-  brokers: KAFKA_BOOTSTRAP_SERVERS.split(","),
-  ssl: true,
-  sasl: {
-    mechanism: "plain",
-    username: KAFKA_API_KEY,
-    password: KAFKA_API_SECRET,
-  },
-});
+export const NEWS_API_BASE_URL = process.env.NEWS_API_BASE_URL ?? "";
 
 // ── Google Custom Search API ─────────────────────────────────────────
 export interface GoogleSearchItem {

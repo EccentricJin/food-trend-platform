@@ -8,13 +8,11 @@ export async function insertNaverSearchResult(
   await pool.execute(
     `INSERT INTO naver_search_results
        (run_id, msg_type, category, keyword, search_type, requested_at,
-        total_available, item_title, item_link, item_data,
-        kafka_offset, kafka_partition)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        total_available, item_title, item_link, item_data)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.run_id, row.msg_type, row.category, row.keyword, row.search_type, row.requested_at,
       row.total_available, row.item_title, row.item_link, row.item_data,
-      row.kafka_offset ?? null, row.kafka_partition ?? null,
     ],
   );
 }
@@ -25,18 +23,16 @@ export async function insertNaverSearchResultsBatch(
 ): Promise<void> {
   if (rows.length === 0) return;
   const placeholders = rows
-    .map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
     .join(", ");
   const values = rows.flatMap((row) => [
     row.run_id, row.msg_type, row.category, row.keyword, row.search_type, row.requested_at,
     row.total_available, row.item_title, row.item_link, row.item_data,
-    row.kafka_offset ?? null, row.kafka_partition ?? null,
   ]);
   await pool.execute(
     `INSERT INTO naver_search_results
        (run_id, msg_type, category, keyword, search_type, requested_at,
-        total_available, item_title, item_link, item_data,
-        kafka_offset, kafka_partition)
+        total_available, item_title, item_link, item_data)
      VALUES ${placeholders}`,
     values,
   );

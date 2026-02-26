@@ -13,12 +13,12 @@ export interface DbConfig {
 
 export function getDbConfigFromEnv(): DbConfig {
   return {
-    host: process.env.MYSQL_HOST ?? "localhost",
-    port: parseInt(process.env.MYSQL_PORT ?? "3306"),
-    user: process.env.MYSQL_USER ?? "food_trend_user",
-    password: process.env.MYSQL_PASSWORD ?? "",
-    database: process.env.MYSQL_DATABASE ?? "food_trend_db",
-    connectionLimit: parseInt(process.env.MYSQL_POOL_SIZE ?? "10"),
+    host: process.env.MYSQL_HOST ?? process.env.DB_HOST ?? "localhost",
+    port: parseInt(process.env.MYSQL_PORT ?? process.env.DB_PORT ?? "3306"),
+    user: process.env.MYSQL_USER ?? process.env.DB_USER ?? "food_trend_user",
+    password: process.env.MYSQL_PASSWORD ?? process.env.DB_PASSWORD ?? "",
+    database: process.env.MYSQL_DATABASE ?? process.env.DB_NAME ?? "food_trend_db",
+    connectionLimit: parseInt(process.env.MYSQL_POOL_SIZE ?? process.env.DB_POOL_SIZE ?? "10"),
   };
 }
 

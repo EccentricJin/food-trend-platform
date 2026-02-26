@@ -1,8 +1,6 @@
 import {
-  kafka,
   searchNaver,
-  CompressionTypes,
-  TOPIC,
+  NEWS_API_BASE_URL,
   sleep,
   type NaverShopItem,
 } from "./lib.js";
@@ -10,7 +8,9 @@ import {
   getPool, closePool, ensureSchema,
   startCollectionRun, completeCollectionRun, failCollectionRun,
   insertNaverIngredientSearchResultsBatch,
+  sendNewsArticlesBatch,
   type NaverIngredientSearchRow,
+  type NewsArticleInput,
 } from "shared-db";
 
 interface Ingredient {
@@ -43,7 +43,7 @@ const ingredients: Ingredient[] = [
   {
     name: "버터",
     shopKeywords: ["무염버터 450g", "앵커버터", "이즈니버터", "버터 베이킹용"],
-    newsKeywords: ["버터 가격 동향 2025", "버터 시세"],
+    newsKeywords: ["버터 가격 동향 2026", "버터 시세"],
   },
   {
     name: "설탕",
@@ -58,7 +58,7 @@ const ingredients: Ingredient[] = [
   {
     name: "달걀",
     shopKeywords: ["계란 30구", "달걀 대란"],
-    newsKeywords: ["달걀 가격 동향 2025", "계란 시세"],
+    newsKeywords: ["달걀 가격 동향 2026", "계란 시세"],
   },
   {
     name: "바닐라",
@@ -70,7 +70,26 @@ const ingredients: Ingredient[] = [
     shopKeywords: ["두바이 초콜릿 쿠키", "두바이 쫀득 쿠키 완제품"],
     newsKeywords: ["두바이 쿠키 가격 비교"],
   },
+  {
+    name: "생크림",
+    shopKeywords: ["동물성 생크림 1L", "생크림 베이킹용"],
+    newsKeywords: ["생크림 가격 동향"],
+  },
+  {
+    name: "우유",
+    shopKeywords: ["우유 1L", "서울우유 1L"],
+    newsKeywords: ["우유 가격 동향 2026", "원유 가격"],
+  },
+  {
+    name: "카카오",
+    shopKeywords: ["카카오파우더 베이킹", "카카오닙스", "카카오버터"],
+    newsKeywords: ["카카오 가격 동향 2026", "카카오 원두 시세"],
+  },
 ];
+
+function stripHtml(str: string): string {
+  return str.replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, " ").trim();
+}
 
 async function main() {
   // MySQL 초기화
@@ -81,10 +100,8 @@ async function main() {
     collector: "collect-ingredients",
   });
 
-  const producer = kafka.producer();
-  await producer.connect();
-
-  let totalMessages = 0;
+  let totalRecords = 0;
+  let totalNewsSynced = 0;
 
   for (const ingredient of ingredients) {
     console.log(`\n${"─".repeat(50)}`);
@@ -109,32 +126,9 @@ async function main() {
             ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length)
             : 0;
 
-        const messages = items.map((item, idx) => ({
-          key: `ingredient:${ingredient.name}:shop:${keyword}:${idx}`,
-          value: JSON.stringify({
-            type: "ingredient_price",
-            category: "두바이쿠키재료",
-            ingredient: ingredient.name,
-            keyword,
-            searchType: "shop",
-            requestedAt: new Date().toISOString(),
-            priceStats: { min: minPrice, max: maxPrice, avg: avgPrice, count: prices.length },
-            item,
-          }),
-          headers: {
-            source: "naver-ingredient-collector",
-            category: "두바이쿠키재료",
-            ingredient: ingredient.name,
-            searchType: "shop",
-            query: keyword,
-          },
-        }));
-
-        await producer.send({ topic: TOPIC, compression: CompressionTypes.GZIP, messages });
-
         // MySQL 저장
         try {
-          const requestedAt = new Date().toISOString();
+          const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
           const dbRows: NaverIngredientSearchRow[] = items.map((item: any) => ({
             run_id: runId,
             msg_type: "ingredient_price",
@@ -156,7 +150,7 @@ async function main() {
           console.log(`  [DB] 저장 실패: ${(dbErr as Error).message}`);
         }
 
-        totalMessages += messages.length;
+        totalRecords += items.length;
         console.log(
           `  ✅ [shop] "${keyword}" - ${items.length}건 (최저 ${minPrice.toLocaleString()}원 / 평균 ${avgPrice.toLocaleString()}원 / 최고 ${maxPrice.toLocaleString()}원)`,
         );
@@ -176,31 +170,9 @@ async function main() {
           continue;
         }
 
-        const messages = items.map((item, idx) => ({
-          key: `ingredient:${ingredient.name}:news:${keyword}:${idx}`,
-          value: JSON.stringify({
-            type: "ingredient_news",
-            category: "두바이쿠키재료",
-            ingredient: ingredient.name,
-            keyword,
-            searchType: "news",
-            requestedAt: new Date().toISOString(),
-            item,
-          }),
-          headers: {
-            source: "naver-ingredient-collector",
-            category: "두바이쿠키재료",
-            ingredient: ingredient.name,
-            searchType: "news",
-            query: keyword,
-          },
-        }));
-
-        await producer.send({ topic: TOPIC, compression: CompressionTypes.GZIP, messages });
-
         // MySQL 저장
         try {
-          const requestedAt = new Date().toISOString();
+          const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
           const dbRows: NaverIngredientSearchRow[] = items.map((item: any) => ({
             run_id: runId,
             msg_type: "ingredient_news",
@@ -222,7 +194,26 @@ async function main() {
           console.log(`  [DB] 저장 실패: ${(dbErr as Error).message}`);
         }
 
-        totalMessages += messages.length;
+        // News API 전송
+        if (NEWS_API_BASE_URL) {
+          try {
+            const articles: NewsArticleInput[] = items.map((item: any) => ({
+              title: stripHtml(item.title ?? ""),
+              url: item.originallink ?? item.link ?? "",
+              source: "naver-news",
+              publisher: null,
+              summary: stripHtml(item.description ?? ""),
+              publishedAt: item.pubDate ?? null,
+            }));
+            const result = await sendNewsArticlesBatch(NEWS_API_BASE_URL, articles);
+            totalNewsSynced += result.total;
+            console.log(`  📰 News API: ${result.created}건 생성 / ${result.updated}건 업데이트`);
+          } catch (newsErr) {
+            console.log(`  [News API] 전송 실패: ${(newsErr as Error).message}`);
+          }
+        }
+
+        totalRecords += items.length;
         console.log(`  ✅ [news] "${keyword}" - ${items.length}건`);
         await sleep(100);
       } catch (e) {
@@ -232,35 +223,13 @@ async function main() {
 
     // 블로그 검색 (레시피/가격 후기)
     try {
-      const blogKeyword = `두바이쿠키 ${ingredient.name} 가격`;
+      const blogKeyword = `${ingredient.name} 가격`;
       const data = await searchNaver("blog", blogKeyword, 30);
       const items = data.items || [];
       if (items.length > 0) {
-        const messages = items.map((item, idx) => ({
-          key: `ingredient:${ingredient.name}:blog:${idx}`,
-          value: JSON.stringify({
-            type: "ingredient_blog",
-            category: "두바이쿠키재료",
-            ingredient: ingredient.name,
-            keyword: blogKeyword,
-            searchType: "blog",
-            requestedAt: new Date().toISOString(),
-            item,
-          }),
-          headers: {
-            source: "naver-ingredient-collector",
-            category: "두바이쿠키재료",
-            ingredient: ingredient.name,
-            searchType: "blog",
-            query: blogKeyword,
-          },
-        }));
-
-        await producer.send({ topic: TOPIC, compression: CompressionTypes.GZIP, messages });
-
         // MySQL 저장
         try {
-          const requestedAt = new Date().toISOString();
+          const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
           const dbRows: NaverIngredientSearchRow[] = items.map((item: any) => ({
             run_id: runId,
             msg_type: "ingredient_blog",
@@ -282,7 +251,7 @@ async function main() {
           console.log(`  [DB] 저장 실패: ${(dbErr as Error).message}`);
         }
 
-        totalMessages += messages.length;
+        totalRecords += items.length;
         console.log(`  ✅ [blog] "${blogKeyword}" - ${items.length}건`);
       }
       await sleep(100);
@@ -291,15 +260,14 @@ async function main() {
     }
   }
 
-  await producer.disconnect();
-  await completeCollectionRun(pool, runId, totalMessages);
+  await completeCollectionRun(pool, runId, totalRecords);
   await closePool();
 
   console.log(`\n${"=".repeat(60)}`);
-  console.log("📊 두바이 쫀득 쿠키 재료 가격 수집 완료");
+  console.log("📊 재료 가격 수집 완료");
   console.log("=".repeat(60));
-  console.log(`  총 Kafka 메시지: ${totalMessages}건`);
-  console.log(`  저장 토픽: ${TOPIC}`);
+  console.log(`  총 레코드: ${totalRecords}건`);
+  console.log(`  News API 전송: ${totalNewsSynced}건`);
   console.log(`  MySQL 저장: ✅ (run_id: ${runId})`);
   console.log("=".repeat(60));
 }

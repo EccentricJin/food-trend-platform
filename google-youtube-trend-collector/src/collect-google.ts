@@ -1,10 +1,4 @@
-import {
-  kafka,
-  searchGoogle,
-  CompressionTypes,
-  GOOGLE_SEARCH_TOPIC,
-  sleep,
-} from "./lib.js";
+import { searchGoogle, sleep } from "./lib.js";
 import {
   getPool, closePool, ensureSchema,
   startCollectionRun, completeCollectionRun, failCollectionRun,
@@ -30,17 +24,24 @@ const queries: QueryGroup[] = [
   {
     category: "유행디저트",
     keywords: [
-      "2025 유행 디저트 트렌드",
+      "2026 유행 디저트 트렌드",
       "크럼블쿠키 인기",
       "약과 디저트 유행",
       "소금빵 트렌드",
       "휘낭시에 맛집",
+      "크루아상 맛집",
+      "타르트 트렌드",
+      "마들렌 인기",
+      "까눌레 트렌드",
+      "스콘 맛집",
+      "에그타르트 인기",
+      "티라미수 트렌드",
     ],
   },
   {
     category: "유행음식",
     keywords: [
-      "2025 음식 트렌드",
+      "2026 음식 트렌드",
       "마라탕 인기",
       "로제떡볶이 트렌드",
       "제로음료 시장",
@@ -50,24 +51,49 @@ const queries: QueryGroup[] = [
   {
     category: "유행카페",
     keywords: [
-      "2025 핫플 카페 추천",
+      "2026 핫플 카페 추천",
       "성수 카페 트렌드",
       "을지로 카페 핫플",
       "카페 디저트 트렌드",
     ],
   },
+  {
+    category: "카페운영",
+    keywords: [
+      "카페 운영 노하우",
+      "카페 창업 2026",
+      "카페 메뉴 트렌드",
+      "카페 인테리어 트렌드",
+      "카페 수익 구조",
+    ],
+  },
+  {
+    category: "베이커리운영",
+    keywords: [
+      "빵집 운영 노하우",
+      "베이커리 트렌드 2026",
+      "빵집 창업",
+      "제과 트렌드",
+      "베이커리 카페 창업",
+    ],
+  },
+  {
+    category: "원재료가격",
+    keywords: [
+      "밀가루 가격 동향",
+      "버터 가격 시세",
+      "설탕 가격 동향",
+      "달걀 가격 시세",
+      "바닐라 원재료 가격",
+      "초콜릿 원재료 가격",
+      "카카오 가격 동향",
+      "생크림 가격",
+      "우유 가격 동향",
+    ],
+  },
 ];
 
 async function main() {
-  // 토픽 생성
-  const admin = kafka.admin();
-  await admin.connect();
-  const created = await admin.createTopics({
-    topics: [{ topic: GOOGLE_SEARCH_TOPIC, numPartitions: 6, replicationFactor: 3 }],
-  });
-  console.log(`토픽 '${GOOGLE_SEARCH_TOPIC}':`, created ? "새로 생성" : "이미 존재");
-  await admin.disconnect();
-
   // MySQL 초기화
   const pool = getPool();
   await ensureSchema(pool);
@@ -76,10 +102,7 @@ async function main() {
     collector: "collect-google",
   });
 
-  const producer = kafka.producer();
-  await producer.connect();
-
-  let totalMessages = 0;
+  let totalRecords = 0;
 
   for (const { category, keywords } of queries) {
     console.log(`\n${"=".repeat(60)}`);
@@ -97,38 +120,9 @@ async function main() {
           continue;
         }
 
-        const messages = items.map((item, idx) => ({
-          key: `google:${category}:${keyword}:${idx}`,
-          value: JSON.stringify({
-            type: "google_search",
-            category,
-            keyword,
-            requestedAt: new Date().toISOString(),
-            totalResults: data.searchInformation.totalResults,
-            searchTime: data.searchInformation.searchTime,
-            item: {
-              title: item.title,
-              link: item.link,
-              snippet: item.snippet,
-              displayLink: item.displayLink,
-            },
-          }),
-          headers: {
-            source: "google-search-collector",
-            category,
-            query: keyword,
-          },
-        }));
-
-        await producer.send({
-          topic: GOOGLE_SEARCH_TOPIC,
-          compression: CompressionTypes.GZIP,
-          messages,
-        });
-
         // MySQL 저장
         try {
-          const requestedAt = new Date().toISOString();
+          const requestedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
           const dbRows: GoogleSearchRow[] = items.map((item) => ({
             run_id: runId,
             category,
@@ -146,7 +140,7 @@ async function main() {
           console.log(`  [DB] 저장 실패: ${(dbErr as Error).message}`);
         }
 
-        totalMessages += messages.length;
+        totalRecords += items.length;
         console.log(
           `  ✅ "${keyword}" - ${items.length}건 (전체 약 ${parseInt(data.searchInformation.totalResults).toLocaleString()}건)`,
         );
@@ -157,15 +151,13 @@ async function main() {
     }
   }
 
-  await producer.disconnect();
-  await completeCollectionRun(pool, runId, totalMessages);
+  await completeCollectionRun(pool, runId, totalRecords);
   await closePool();
 
   console.log(`\n${"=".repeat(60)}`);
   console.log("📊 Google 검색 수집 완료");
   console.log("=".repeat(60));
-  console.log(`  총 Kafka 메시지: ${totalMessages}건`);
-  console.log(`  저장 토픽: ${GOOGLE_SEARCH_TOPIC}`);
+  console.log(`  총 수집: ${totalRecords}건`);
   console.log(`  MySQL 저장: ✅ (run_id: ${runId})`);
   console.log("=".repeat(60));
 }
